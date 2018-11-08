@@ -1,15 +1,23 @@
 import os
 import uuid
+import logging
 
 from inotify_simple import INotify, flags, masks
 
+logger = logging.getLogger('autodl')
+logging.basicConfig(level=logging.DEBUG)
+
 from lib.config import CONFIG
+
+logging.getLogger().setLevel(getattr(logging, CONFIG['LOG_LEVEL'].upper()))
 
 
 def get_inotify():
     inotify = INotify()
     watch_flags = masks.ALL_EVENTS
+    logger.debug("inotify flags: %s", watch_flags)
     for path in CONFIG['MOUNTS']:
+        logger.info("Watching path %s", path)
         wd = inotify.add_watch(path, watch_flags)
     return inotify
 
@@ -24,20 +32,33 @@ def read_events(inotify):
                 for path in CONFIG['MOUNTS']:
                     candidate = os.path.join(path, event.name)
                     if os.path.exists(candidate) and os.path.ismount(candidate):
-                        yield candidate
+                        path_in_dest = False
+                        for dest_path in CONFIG['DESTINATIONS']:
+                            dest_path = os.path.abspath(dest_path)
+                            if candidate.startswith(dest_path):
+                                logger.debug("Ignore mounted folder %s because it's inside destination %s", candidate, dest_path)
+                                path_in_dest = True
+                                break
+
+                        if not path_in_dest:
+                            logger.info("Mounted %s", candidate)
+                            yield candidate
 
 
 def get_card_id(mountpoint, default=None):
     card_id_file = os.path.join(mountpoint, 'autodl-card-id.txt')
     try:
         with open(card_id_file, 'r') as fp:
-            return fp.read().split('\n')[0].strip()
+            card_id = fp.read().split('\n')[0].strip()
+            logger.debug("Read card ID %s from %s", card_id, card_id_file)
+            return card_id
     except (IOError, OSError):
-        pass
+        logger.debug("No card ID in %s, generating one", mountpoint)
 
     card_id = default or str(uuid.uuid4())
     with open(card_id_file, 'w') as fp:
         fp.write(card_id)
+    logger.debug("Wrote card ID %s to %s", card_id, card_id_file)
     return card_id
 
 
@@ -52,11 +73,13 @@ def get_destinations_for_card(mountpoint):
                 candidate += '-' + str(num)
             if not os.path.exists(candidate):
                 os.makedirs(candidate)
+                logger.debug("Created new destination %s for card %s", candidate, mountpoint)
                 yield candidate
                 break
             else:
                 dest_card_id = get_card_id(candidate, default=card_id)
                 if card_id == dest_card_id:
+                    logger.debug("Found existing destination %s for card %s", candidate, mountpoint)
                     yield candidate
                     break
             num += 1
@@ -90,6 +113,7 @@ def copy_file(src_file, dest_files):
             dest_dir = os.path.dirname(dest_fname)
             os.makedirs(dest_dir, exist_ok=True)
             dest_fps.append(open(dest_fname, 'wb'))
+            logger.info("Copy %s to %s", src_file, dest_fname)
 
         while True:
             data = src_fp.read(100000)
@@ -101,7 +125,7 @@ def copy_file(src_file, dest_files):
                     written += fp.write(data[written:])
 
         for stat, fname in dest_files:
-            os.utime(fname, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+            os.utime(fname, (stat.st_atime_ns, stat.st_mtime))
     finally:
         if src_fp:
             src_fp.close()
@@ -117,6 +141,6 @@ while True:
             missing_dests = list(get_missing_destinations(path, fname, dests))
             if not missing_dests:
                 continue
-            print(fname, missing_dests)
             copy_file(fname, missing_dests)
+        logger.info("Unmounting %s", path)
         os.system('umount ' + path)
