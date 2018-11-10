@@ -20,7 +20,7 @@ def get_inotify():
 
 
 def read_events(inotify):
-    for event in inotify.read(timeout=10000, read_delay=1000):
+    for event in inotify.read(timeout=1000, read_delay=1000):
         if event.name:
             ev_flags = list(flags.from_mask(event.mask))
             if flags.ISDIR in ev_flags and flags.CREATE in ev_flags:
