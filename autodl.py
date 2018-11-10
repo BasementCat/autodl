@@ -8,6 +8,7 @@ logger = logging.getLogger('autodl')
 logging.basicConfig(level=logging.DEBUG)
 
 from lib.config import CONFIG
+import lib.led
 
 logging.getLogger().setLevel(getattr(logging, CONFIG['LOG_LEVEL'].upper()))
 
@@ -133,14 +134,17 @@ def copy_file(src_file, dest_files):
             fp.close()
 
 
-inotify = get_inotify()
-while True:
-    for path in read_events(inotify):
-        dests = list(get_destinations_for_card(path))
-        for fname in get_files(path):
-            missing_dests = list(get_missing_destinations(path, fname, dests))
-            if not missing_dests:
-                continue
-            copy_file(fname, missing_dests)
-        logger.info("Unmounting %s", path)
-        os.system('umount ' + path)
+with lib.led.LED(CONFIG['LED']) as led:
+    with lib.led.Blink(led, 1):
+        inotify = get_inotify()
+        while True:
+            for path in read_events(inotify):
+                with lib.led.ExtBlink(led, 0.1, on_count=3, cycle_time=1):
+                    dests = list(get_destinations_for_card(path))
+                    for fname in get_files(path):
+                        missing_dests = list(get_missing_destinations(path, fname, dests))
+                        if not missing_dests:
+                            continue
+                        copy_file(fname, missing_dests)
+                    logger.info("Unmounting %s", path)
+                    os.system('umount ' + path)

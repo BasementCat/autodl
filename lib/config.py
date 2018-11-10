@@ -9,6 +9,7 @@ CONFIG = {
     'MOUNTS': ['/media'],
     'DESTINATIONS': ['/tmp/autodl'],
     'LOG_LEVEL': 'INFO',
+    'LED': None,
 }
 
 
