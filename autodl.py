@@ -66,7 +66,26 @@ def get_card_id(mountpoint, default=None):
 def get_destinations_for_card(mountpoint):
     card_id = get_card_id(mountpoint)
     card_name = os.path.basename(mountpoint)
+
+    # If any destination has the id of this card, use it
+    found_in_dest = []
     for dest in CONFIG['DESTINATIONS']:
+        for subdir in os.listdir(os.path.abspath(os.path.expanduser(dest))):
+            candidate = os.path.abspath(os.path.expanduser(os.path.join(dest, subdir)))
+            if not os.path.isdir(candidate):
+                continue
+            dest_card_id = get_card_id(candidate, default=card_id)
+            if card_id == dest_card_id:
+                logger.debug("Found existing destination %s for card %s", candidate, mountpoint)
+                found_in_dest.append(dest)
+                yield candidate
+                break
+
+    for dest in CONFIG['DESTINATIONS']:
+        if dest in found_in_dest:
+            # Already found a candidate in this destination
+            continue
+
         num = 0
         while True:
             candidate = os.path.abspath(os.path.expanduser(os.path.join(dest, card_name)))
@@ -77,12 +96,6 @@ def get_destinations_for_card(mountpoint):
                 logger.debug("Created new destination %s for card %s", candidate, mountpoint)
                 yield candidate
                 break
-            else:
-                dest_card_id = get_card_id(candidate, default=card_id)
-                if card_id == dest_card_id:
-                    logger.debug("Found existing destination %s for card %s", candidate, mountpoint)
-                    yield candidate
-                    break
             num += 1
 
 
