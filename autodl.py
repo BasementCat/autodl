@@ -3,6 +3,7 @@ import os
 import subprocess
 import logging
 import threading
+from wsgiref.simple_server import make_server
 
 logger = logging.getLogger('autodl')
 logging.basicConfig(level=logging.DEBUG)
@@ -10,6 +11,8 @@ logging.basicConfig(level=logging.DEBUG)
 from lib.config import CONFIG
 from lib.led import LED, Blink, ExtBlink
 from lib import dl
+
+from web import app as webapp
 
 logging.getLogger().setLevel(getattr(logging, CONFIG['LOG_LEVEL'].upper()))
 
@@ -32,11 +35,30 @@ def run_autodl(stop_event=None):
                         # os.system('umount ' + path)
 
 
+def create_web():
+    server = make_server('', 8000, webapp)
+    return server
+
+
+def start_web(server):
+    server.serve_forever()
+
+
+def run_web(server, stop_event):
+    while not stop_event.is_set():
+        time.sleep(1)
+    server.shutdown()
+
+
 if __name__ == '__main__':
     stop_event = threading.Event()
     threads = []
 
     threads.append(threading.Thread(target=run_autodl, kwargs={'stop_event': stop_event}))
+
+    webserver = create_web()
+    threads.append(threading.Thread(target=start_web, kwargs={'server': webserver}))
+    threads.append(threading.Thread(target=run_web, kwargs={'server': webserver, 'stop_event': stop_event}))
 
     for t in threads:
         t.start()

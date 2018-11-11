@@ -96,6 +96,21 @@ def get_destinations_for_card(mountpoint):
             num += 1
 
 
+def get_cards():
+    out ={}
+    for dest in CONFIG['DESTINATIONS']:
+        for subdir in os.listdir(os.path.abspath(os.path.expanduser(dest))):
+            candidate = os.path.abspath(os.path.expanduser(os.path.join(dest, subdir)))
+            if not os.path.isdir(candidate):
+                continue
+            dest_card_id = get_card_id(candidate)
+            if dest_card_id in out:
+                continue
+
+            out[dest_card_id] = candidate, get_files(candidate)
+    return out
+
+
 def get_files(src_dir):
     for root, dirs, files in os.walk(src_dir):
         for f in files:
