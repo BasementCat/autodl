@@ -7,6 +7,7 @@ from inotify_simple import INotify, flags, masks
 logger = logging.getLogger(__name__)
 
 from lib.config import CONFIG
+from lib.util import format_bytes
 
 
 def get_inotify():
@@ -108,7 +109,19 @@ def get_missing_destinations(src_dir, src_file, dest_dirs):
         candidate = os.path.join(dest_dir, fname)
         if os.path.exists(candidate):
             dest_stat = os.stat(candidate)
-            if src_stat.st_size != dest_stat.st_size or src_stat.st_mtime != dest_stat.st_mtime:
+            existing_file_ok = True
+            if src_stat.st_size != dest_stat.st_size:
+                existing_file_ok = False
+                logger.debug("File sizes don't match: %s vs. %s (%s -> %s)",
+                    format_bytes(src_stat.st_size), format_bytes(dest_stat.st_size),
+                    src_file, candidate)
+            if int(src_stat.st_mtime) != int(dest_stat.st_mtime):
+                existing_file_ok = False
+                logger.debug("File mtimes don't match: %s vs. %s (%s -> %s)",
+                    int(src_stat.st_mtime), int(dest_stat.st_mtime),
+                    src_file, candidate)
+
+            if not existing_file_ok:
                 yield src_stat, candidate
         else:
             yield src_stat, candidate
@@ -133,11 +146,12 @@ def copy_file(src_file, dest_files):
                 written = 0
                 while written < len(data):
                     written += fp.write(data[written:])
-
-        for stat, fname in dest_files:
-            os.utime(fname, (stat.st_atime_ns, stat.st_mtime))
     finally:
         if src_fp:
             src_fp.close()
         for fp in dest_fps:
             fp.close()
+
+    for stat, fname in dest_files:
+        if os.path.exists(fname):
+            os.utime(fname, (int(stat.st_atime), int(stat.st_mtime)))

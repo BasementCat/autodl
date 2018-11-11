@@ -1,5 +1,6 @@
 import time
 import os
+import subprocess
 import logging
 import threading
 
@@ -27,7 +28,8 @@ def run_autodl(stop_event=None):
                                 continue
                             dl.copy_file(fname, missing_dests)
                         logger.info("Unmounting %s", path)
-                        os.system('umount ' + path)
+                        subprocess.call(['umount', path])
+                        # os.system('umount ' + path)
 
 
 if __name__ == '__main__':
